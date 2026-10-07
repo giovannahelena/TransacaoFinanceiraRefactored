@@ -1,11 +1,8 @@
 using Xunit;
-using TransacaoFinanceira.Models;
 using TransacaoFinanceira.Repositories;
 using TransacaoFinanceira.Services;
 using System.Collections.Generic;
-using System.Linq;
 using System.Threading.Tasks;
-using System;
 
 namespace TransacaoFinanceira.Tests
 {

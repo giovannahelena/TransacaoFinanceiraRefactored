@@ -1,9 +1,6 @@
 using System;
-using System.Collections.Generic;
 using System.Threading.Tasks;
-using TransacaoFinanceira.Models;
 using TransacaoFinanceira.Repositories;
-using TransacaoFinanceira.Services;
 
 namespace TransacaoFinanceira.Services
 {
