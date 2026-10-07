@@ -1,13 +1,66 @@
-# TransacaoFinanceira
-Case para refatoração
+# Relatório de Refatoração: Projeto TransacaoFinanceira
 
-Passos a implementar:
-1. Corrija o que for necessario para resolver os erros de compilação.
+## 1. Introdução
+Este repositório trata-se de uma refatoração de um sistema legado de orquestração de transações financeiras. O projeto original apresentava falhas críticas de concorrência, erros de runtime e uma estrutura monolítica que dificultava a manutenção e a testabilidade. O objetivo foi transformar o código em uma aplicação robusta, escalável e seguindo os mais rigorosos padrões de engenharia de software.
 
+## 2. Modificações Realizadas
 
-2. Execute o programa para avaliar a saida, identifique e corrija o motivo de algumas transacoes estarem sendo canceladas mesmo com saldo positivo e outras sem saldo sendo efetivadas.
-3. Aplique o code review e refatore conforme as melhores praticas(SOLID,Patterns,etc).
-4. Implemente os testes unitários que julgar efetivo.
-5. Crie um git hub e compartilhe o link respondendo o ultimo e-mail.
+### 🛠️ Correções Funcionais e Técnicas
+- **Correções Básicas Necessárias para Build (Compilação)**:
+    - Atualização do .Net Target Framework de 5.0, muito antigo, para 10.0.
+	- Utilização de tipo long, ao invés de int, para guardar os números das contas, evitando exceder o Int.MaxValue (2,147,483,647), como ocorria na linha 16 do arquivo Program.cs no projeto original
 
-Obs: Voce é livre para implementar na linguagem de sua preferência desde que respeite as funcionalidades e saídas existentes, além de aplicar os conceitos solicitados.
+- **Correções de erros em Runtime**:	
+    - Implementação de **Locking Hierárquico**: Para evitar *Race Conditions* e *Deadlocks* em transferências paralelas, as contas são travadas sempre em ordem crescente de ID.
+    - Uso de `ConcurrentDictionary` e `ConcurrentBag` para garantir a integridade dos dados em ambiente multithread.
+    - Conversão de tipo inadequada no `getSaldo` original.
+
+- **Demais melhorias de código implementadas**:
+    - Implementação de `System.Guid` para a correlação de transações. O sistema gera dinamicamente um identificador globalmente único (`Guid.NewGuid()`) para cada transação, garantindo a rastreabilidade total e eliminando a dependência de IDs sequenciais mockados.
+    - Migração dos dados de transação para o arquivo `transacoes.json`, permitindo a alteração de cenários de teste sem a necessidade de recompilação.
+    - Configuração de **Build Automation** via `.csproj` (`CopyToOutputDirectory`), garantindo que os arquivos de dados sejam automaticamente copiados para o diretório de execução, evitando erros de "Arquivo Não Encontrado".
+    - Implementado um relatório de histórico de transações 
+
+### 🏗️ Melhorias Estruturais na Arquitetura
+O projeto foi migrado de um script único para uma **Arquitetura em Camadas (Layered Architecture)** com separação de responsabilidades:
+
+1.  **Camada de Modelos (`/Models`)**:
+    - Utilização de **`records`** para `TransactionRequest` e `RegistroTransacao`, garantindo imutabilidade para DTOs e registros de auditoria.
+    - `Conta`: Representa o estado da conta.
+    - `StatusTransacao`: Enum para status de transação (Success/Cancelled).
+
+2.  **Camada de Repositórios (`/Repositories`)**:
+    - Implementação do padrão **Repository**, desacoplando a lógica de negócio do armazenamento.
+    - `IAccountRepository` e `ITransactionRepository`: Interfaces que permitem a troca da implementação de armazenamento (ex: de memória para SQL) sem impactar o restante do sistema.
+
+3.  **Camada de Serviços (`/Services`)**:
+    - `TransactionService`: Centraliza a regra de negócio (validação de saldo, locks e transferência).
+    - `TransactionLoader`: Especialista na leitura e desserialização do arquivo JSON, removendo essa responsabilidade da camada de apresentação.
+    - `ProcessadorTransacoes`: Orquestrador de alto nível que coordena o fluxo completo: Carga $\rightarrow$ Processamento $\rightarrow$ Sumário.
+
+4.  **Camada de Apresentação (`Program.cs`)**:
+    - Atua exclusivamente como um **Composition Root**. É responsável apenas por instanciar as dependências e disparar o processador.
+
+## 3. Funcionamento do Projeto
+
+### Fluxo de uma Transação:
+1.  **Carga**: O `TransactionLoader` lê e valida o arquivo `transactions.json`.
+2.  **Orquestração**: O `TransactionProcessor` dispara as transferências via `Parallel.ForEach`, mantendo uma simulação de concorrência conforme o mundo real.
+3.  **Processamento**:
+    - O `TransactionService` gera um **GUID** único para a operação.
+    - Aplica travas (`lock`) ordenadas por ID de conta para evitar deadlocks.
+    - Verifica a disponibilidade de saldo.
+    - Se válido: Debita da origem $\rightarrow$ Credita no destino $\rightarrow$ Registra "Sucesso" no histórico.
+    - Se inválido: Registra "Cancelado" no histórico com o motivo.
+4.  **Finalização**: O sistema gera um sumário final de auditoria recuperando todos os registros do `ITransactionRepository`.
+
+## 4. Princípios de Software Aplicados
+
+- **SOLID**:
+    - **SRP (Single Responsibility)**: Cada classe tem uma única responsabilidade clara (ex: `TransactionLoader` apenas carrega dados).
+    - **DIP (Dependency Inversion)**: O serviço e o processador dependem de interfaces, facilitando a testabilidade e a extensibilidade.
+- **Clean Code**: Nomenclatura em `PascalCase`, remoção de lógica complexa do `Main` e uso de tipos imutáveis.
+- **Auditabilidade**: Implementação de log de transações com identificadores únicos, essencial para conformidade em sistemas financeiros.
+
+## 5. Conclusão
+A refatoração eliminou todos os bugs de concorrência e runtime, transformando um código instável em um sistema modular, auditável e profissional. A arquitetura implementada permite que o sistema evolua facilmente para suportar bancos de dados reais e novas regras de negócio sem a necessidade de refatorações profundas.
